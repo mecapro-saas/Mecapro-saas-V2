@@ -1,0 +1,71 @@
+version: '3.9'
+
+services:
+  # Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3000"
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: postgresql://mecapro:password123@postgres:5432/mecapro_db
+      JWT_SECRET: dev-secret-key-change-in-production
+      STRIPE_SECRET_KEY: sk_test_your_key
+      STRIPE_PUBLISHABLE_KEY: pk_test_your_key
+      STRIPE_WEBHOOK_SECRET: whsec_test_your_key
+      STRIPE_PRICE_STARTER: price_test_starter
+      STRIPE_PRICE_PRO: price_test_pro
+      STRIPE_PRICE_PREMIUM: price_test_premium
+      FRONTEND_URL: http://localhost:3000
+      CORS_ORIGIN: http://localhost:3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend/src:/app/src
+    networks:
+      - mecapro
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_API_URL: http://localhost:3001/api
+      VITE_STRIPE_PUBLISHABLE_KEY: pk_test_your_key
+    depends_on:
+      - backend
+    networks:
+      - mecapro
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: mecapro
+      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: mecapro_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mecapro"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mecapro
+
+volumes:
+  postgres_data:
+
+networks:
+  mecapro:
+    driver: bridge
