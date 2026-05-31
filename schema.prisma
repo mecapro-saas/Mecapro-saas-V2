@@ -1,0 +1,188 @@
+// prisma/schema.prisma
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ===== UTILISATEURS =====
+model User {
+  id                String    @id @default(cuid())
+  email             String    @unique
+  password          String?
+  firstName         String
+  lastName          String
+  userType          UserType  @default(MECHANIC)
+  siret             String?   @unique
+  siretVerified     Boolean   @default(false)
+  phoneNumber       String?
+  profileImage      String?
+  
+  // Location
+  city              String
+  latitude          Float
+  longitude         Float
+  
+  // Pour mécaniciens
+  specialities      String[]  @default([])
+  experience        Int?
+  availability      String?
+  certifications    String[]  @default([])
+  bio               String?
+  
+  // Subscription & Stats
+  subscription      Subscription?
+  averageRating     Float     @default(0)
+  totalRatings      Int       @default(0)
+  
+  // Relations
+  sentMessages      Message[] @relation("sentMessages")
+  receivedMessages  Message[] @relation("receivedMessages")
+  ratings           Rating[]  @relation("ratedBy")
+  ratingsReceived   Rating[]  @relation("ratingOn")
+  matchingsAsCompany   Matching[] @relation("company")
+  matchingsAsMechanic  Matching[] @relation("mechanic")
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}
+
+enum UserType {
+  MECHANIC
+  COMPANY
+}
+
+// ===== ABONNEMENTS =====
+model Subscription {
+  id                String    @id @default(cuid())
+  userId            String    @unique
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  plan              Plan      @default(FREEMIUM)
+  status            SubscriptionStatus @default(ACTIVE)
+  
+  stripeCustomerId  String?   @unique
+  stripeSubId       String?   @unique
+  
+  contactQuota      Int       @default(5)
+  contactsUsed      Int       @default(0)
+  contactsResetDate DateTime  @default(now())
+  
+  startDate         DateTime  @default(now())
+  currentPeriodEnd  DateTime  @default(dbgenerated("now() + interval '30 days'"))
+  canceledAt        DateTime?
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}
+
+enum Plan {
+  FREEMIUM
+  STARTER
+  PRO
+  PREMIUM
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELED
+  EXPIRED
+  PAST_DUE
+}
+
+// ===== MATCHING (Contacts entre Entreprises et Mécaniciens) =====
+model Matching {
+  id                String    @id @default(cuid())
+  companyId         String
+  company           User      @relation("company", fields: [companyId], references: [id], onDelete: Cascade)
+  
+  mechanicId        String
+  mechanic          User      @relation("mechanic", fields: [mechanicId], references: [id], onDelete: Cascade)
+  
+  status            MatchingStatus @default(INITIATED)
+  message           String?
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  @@unique([companyId, mechanicId])
+}
+
+enum MatchingStatus {
+  INITIATED
+  ACCEPTED
+  REJECTED
+  COMPLETED
+}
+
+// ===== MESSAGERIE =====
+model Message {
+  id                String    @id @default(cuid())
+  senderId          String
+  sender            User      @relation("sentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  
+  recipientId       String
+  recipient         User      @relation("receivedMessages", fields: [recipientId], references: [id], onDelete: Cascade)
+  
+  content           String
+  readAt            DateTime?
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  @@index([senderId])
+  @@index([recipientId])
+}
+
+// ===== AVIS / RATINGS =====
+model Rating {
+  id                String    @id @default(cuid())
+  ratedById         String
+  ratedBy           User      @relation("ratedBy", fields: [ratedById], references: [id], onDelete: Cascade)
+  
+  ratingOnId        String
+  ratingOn          User      @relation("ratingOn", fields: [ratingOnId], references: [id], onDelete: Cascade)
+  
+  score             Int       @db.SmallInt
+  comment           String?
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  @@unique([ratedById, ratingOnId])
+}
+
+// ===== PAIEMENTS =====
+model Payment {
+  id                String    @id @default(cuid())
+  userId            String
+  
+  stripePaymentId   String    @unique
+  stripeInvoiceId   String?
+  amount            Int
+  currency          String    @default("EUR")
+  
+  status            PaymentStatus @default(PENDING)
+  type              PaymentType
+  description       String?
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  @@index([userId])
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+enum PaymentType {
+  SUBSCRIPTION
+  COMMISSION
+}
